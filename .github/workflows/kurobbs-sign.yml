@@ -1,0 +1,41 @@
+name: 库街区自动签到
+
+on:
+  schedule:
+    # UTC -> 北京时间：每日 08:17，20:17 再检查一次，已签到则跳过。
+    - cron: '17 0,12 * * *'
+  workflow_dispatch:
+    inputs:
+      verify_only:
+        description: '仅运行离线测试，不读取签到凭据、不访问库街区'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kurobbs-sign
+  cancel-in-progress: false
+
+jobs:
+  sign:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+      - name: 验证签到逻辑（离线）
+        run: python -m unittest discover -s tests -p 'test_kurobbs_sign.py' -v
+      - name: 签到
+        if: ${{ !inputs.verify_only }}
+        env:
+          KUROBBS_COOKIE: ${{ secrets.KUROBBS_COOKIE }}
+          KUROBBS_DEVCODE: ${{ secrets.KUROBBS_DEVCODE }}
+          KUROBBS_ACCOUNTS: ${{ secrets.KUROBBS_ACCOUNTS }}
+          KUROBBS_SOURCE: ${{ vars.KUROBBS_SOURCE || 'h5' }}
+        run: python scripts/kurobbs_sign.py
