@@ -17,6 +17,13 @@ class ResponseTests(unittest.TestCase):
     def test_login_failure_overrides_status(self):
         self.assertFalse(classify({"code": "3", "data": {"status": "1"}})[0])
 
+    def test_business_error_with_success_transport_code(self):
+        success, message = classify({"code": "0", "errorCode": "S109"})
+        self.assertFalse(success)
+        self.assertIn("S109", message)
+        self.assertFalse(classify({"code": "0", "errorCode": "unknown",
+                                   "data": {"status": "1"}})[0])
+
     def test_unknown_results_fail_without_echoing_private_values(self):
         for result in ({}, {"code": 0}, {"code": 0, "data": []},
                        {"code": 0, "data": {"status": "unknown"}},

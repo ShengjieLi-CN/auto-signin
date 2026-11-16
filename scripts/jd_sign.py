@@ -36,6 +36,10 @@ def parse_response(text):
 def classify(result):
     if str(result.get("code")) == "3":
         return False, "京东返回未登录或登录已失效，请更新 JD_COOKIE。"
+    if result.get("errorCode") == "S109":
+        return False, "京东返回 S109：当前签到人数较多，请稍晚再来；本次签到未确认。"
+    if result.get("errorCode") not in (None, "", 0, "0"):
+        return False, "京东返回业务错误，签到未确认；请检查 Cookie 或上游接口兼容性。"
     if str(result.get("code")) != "0":
         return False, "京东接口拒绝请求，签到未确认；请检查 Cookie 或上游接口兼容性。"
     data = result.get("data")
