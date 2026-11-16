@@ -1,10 +1,21 @@
 # 自动签到
 
-使用 GitHub Actions 托管日常签到任务，目前支持**库街区国服鸣潮**。支持网页与 App Token、多个账号及绑定角色，无需常驻电脑。
+使用 GitHub Actions 托管日常签到任务，目前支持**库街区国服鸣潮**和**京东京豆签到**，无需常驻电脑。库街区支持网页与 App Token、多个账号及绑定角色。
 
 本项目从 [ShengjieLi-CN/WutheringWavesTool](https://github.com/ShengjieLi-CN/WutheringWavesTool) 独立迁出，仅包含签到脚本、测试、文档和工作流。接口调用方式参考 [leck995/WutheringWavesTool](https://github.com/leck995/WutheringWavesTool) 中的签到及角色查询实现。
 
-## 运行方式
+## 京东京豆签到（Part3）
+
+改编自 [tech-shrimp/GithubActionSample 的 Part3 签到薅羊毛](https://github.com/tech-shrimp/GithubActionSample#part3-签到薅羊毛)，原作者：**技术爬爬虾**。保留上游请求接口与 User-Agent；许可证见 [MIT 原文](licenses/GithubActionSample-MIT.txt)。
+
+- 在 **Settings → Secrets and variables → Actions** 新增或更新 Secret `JD_COOKIE`，值为京东登录后的完整 Cookie。
+- 工作流 **京东签到薅羊毛** 每天北京时间 **08:00** 执行，也可在 Actions 中手动选择 **Run workflow**。
+- 脚本：`scripts/jd_sign.py`；工作流：`.github/workflows/daily_sign.yml`。使用 Python 标准库，无第三方依赖。
+- 只向京东接口发送 Cookie；日志和运行摘要仅输出固定的结果说明，不打印 Cookie、账号信息或原始响应。
+- 网络错误、登录失效和未识别结果会令工作流失败，避免把“程序运行结束”误当作“签到成功”。Cookie 失效后需要重新获取并更新 Secret。上游接口发生变化时也可能需要调整脚本。
+- 离线验证：`python3 -m unittest discover -s tests -p 'test_jd_sign.py' -v`。
+
+## 库街区运行方式
 
 - 每天北京时间 **08:17、20:17** 自动执行，支持手动触发。
 - 自动查询绑定角色；今日已签到则跳过，提交签到后再次查询确认。
