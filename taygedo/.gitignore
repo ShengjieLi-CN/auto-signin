@@ -5,6 +5,7 @@ accounts.json
 credential-key.txt
 device-id.txt
 .env
+!.env.selfhost.example
 .dev.vars*
 !.dev.vars.example
 data
