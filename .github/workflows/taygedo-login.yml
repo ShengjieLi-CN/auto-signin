@@ -1,0 +1,85 @@
+name: 塔吉多登录
+
+on:
+  workflow_dispatch:
+    inputs:
+      account_id:
+        description: '账号标识，多账号时使用不同标识'
+        type: string
+        default: main
+      account_name:
+        description: '账号显示名称'
+        type: string
+        default: 主账号
+
+permissions:
+  contents: read
+
+concurrency:
+  group: taygedo-accounts
+  cancel-in-progress: false
+
+defaults:
+  run:
+    working-directory: taygedo
+
+jobs:
+  login:
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: 检查登录配置
+        working-directory: .
+        env:
+          TAYGEDO_LOGIN_PHONE: ${{ secrets.TAYGEDO_LOGIN_PHONE }}
+          TAYGEDO_LOGIN_PASSWORD: ${{ secrets.TAYGEDO_LOGIN_PASSWORD }}
+          GH_TOKEN: ${{ secrets.GH_SECRET_UPDATE_TOKEN }}
+        run: |
+          if [[ -z "$TAYGEDO_LOGIN_PHONE" || -z "$TAYGEDO_LOGIN_PASSWORD" || -z "$GH_TOKEN" ]]; then
+            echo '::error::请配置 TAYGEDO_LOGIN_PHONE、TAYGEDO_LOGIN_PASSWORD 和 GH_SECRET_UPDATE_TOKEN。'
+            exit 1
+          fi
+          gh api --silent "repos/$GITHUB_REPOSITORY/actions/secrets/public-key"
+
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        with:
+          package_json_file: taygedo/package.json
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
+          cache: pnpm
+          cache-dependency-path: taygedo/pnpm-lock.yaml
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: 登录塔吉多
+        env:
+          TAYGEDO_LOGIN_MODE: password
+          TAYGEDO_LOGIN_PHONE: ${{ secrets.TAYGEDO_LOGIN_PHONE }}
+          TAYGEDO_LOGIN_PASSWORD: ${{ secrets.TAYGEDO_LOGIN_PASSWORD }}
+          TAYGEDO_LOGIN_ACCOUNT_ID: ${{ inputs.account_id || 'main' }}
+          TAYGEDO_LOGIN_ACCOUNT_NAME: ${{ inputs.account_name || '主账号' }}
+          TAYGEDO_ACCOUNTS: ${{ secrets.TAYGEDO_ACCOUNTS }}
+          TAYGEDO_CREDENTIAL_KEY: ${{ secrets.TAYGEDO_CREDENTIAL_KEY }}
+          TAYGEDO_CREDENTIAL_KEY_PATH: credential-key.txt
+        run: |
+          if ! pnpm exec tsx src/login-action.ts > "$RUNNER_TEMP/taygedo-login.log" 2>&1; then
+            echo '::error::塔吉多登录失败，请检查账号、密码和服务状态。'
+            exit 1
+          fi
+
+      - name: 保存账号和密码加密密钥
+        env:
+          GH_TOKEN: ${{ secrets.GH_SECRET_UPDATE_TOKEN }}
+        run: |
+          if [[ -s credential-key.txt ]]; then
+            gh secret set TAYGEDO_CREDENTIAL_KEY --repo "$GITHUB_REPOSITORY" < credential-key.txt
+          fi
+          gh secret set TAYGEDO_ACCOUNTS --repo "$GITHUB_REPOSITORY" < updated-accounts.json

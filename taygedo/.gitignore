@@ -1,0 +1,14 @@
+node_modules
+dist
+updated-accounts.json
+accounts.json
+credential-key.txt
+device-id.txt
+.env
+.dev.vars*
+!.dev.vars.example
+data
+.data
+task_plan.md
+findings.md
+progress.md

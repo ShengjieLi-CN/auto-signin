@@ -1,8 +1,13 @@
 # 自动签到
 
-使用 GitHub Actions 托管日常签到任务，目前支持**库街区国服鸣潮**。支持网页与 App Token、多个账号及绑定角色，无需常驻电脑。
+使用 GitHub Actions 托管**库街区国服鸣潮**和**塔吉多**日常签到任务，无需常驻电脑。
 
-本项目为独立的签到仓库，仅包含签到脚本、测试、文档和工作流。接口调用方式参考 [leck995/WutheringWavesTool](https://github.com/leck995/WutheringWavesTool) 中的签到及角色查询实现。
+库街区支持网页与 App Token、多个账号及绑定角色。接口调用方式参考 [leck995/WutheringWavesTool](https://github.com/leck995/WutheringWavesTool) 中的签到及角色查询实现。
+
+## 塔吉多运行方式
+
+- 每天北京时间 **02:00** 签到，支持在 Actions 手动运行或离线验证。
+- 初次配置需要添加手机号、密码和用于更新账号 Secret 的仓库专用令牌，详见[塔吉多配置说明](docs/塔吉多签到.md)。
 
 ## 库街区运行方式
 

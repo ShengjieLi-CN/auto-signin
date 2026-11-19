@@ -1,0 +1,117 @@
+name: 塔吉多签到
+
+on:
+  schedule:
+    # UTC 18:00 = 北京时间次日 02:00。
+    - cron: '0 18 * * *'
+  workflow_dispatch:
+    inputs:
+      verify_only:
+        description: '仅运行离线测试和构建'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: taygedo-accounts
+  cancel-in-progress: false
+
+defaults:
+  run:
+    working-directory: taygedo
+
+jobs:
+  attendance:
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: 检查签到配置
+        id: config
+        if: ${{ !inputs.verify_only }}
+        working-directory: .
+        env:
+          TAYGEDO_ACCOUNTS: ${{ secrets.TAYGEDO_ACCOUNTS }}
+          GH_SECRET_UPDATE_TOKEN: ${{ secrets.GH_SECRET_UPDATE_TOKEN }}
+        run: |
+          if [[ -n "$TAYGEDO_ACCOUNTS" && -n "$GH_SECRET_UPDATE_TOKEN" ]]; then
+            echo 'ready=true' >> "$GITHUB_OUTPUT"
+          elif [[ "$GITHUB_EVENT_NAME" == schedule ]]; then
+            echo '塔吉多账号尚未配置，跳过本次定时签到。'
+          else
+            echo '::error::请先配置 GH_SECRET_UPDATE_TOKEN 并运行「塔吉多登录」。'
+            exit 1
+          fi
+
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        if: ${{ inputs.verify_only || steps.config.outputs.ready == 'true' }}
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        if: ${{ inputs.verify_only || steps.config.outputs.ready == 'true' }}
+        with:
+          package_json_file: taygedo/package.json
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        if: ${{ inputs.verify_only || steps.config.outputs.ready == 'true' }}
+        with:
+          node-version: '24'
+          cache: pnpm
+          cache-dependency-path: taygedo/pnpm-lock.yaml
+
+      - name: 安装依赖
+        if: ${{ inputs.verify_only || steps.config.outputs.ready == 'true' }}
+        run: pnpm install --frozen-lockfile
+
+      - name: 验证签到逻辑（离线）
+        if: inputs.verify_only
+        run: |
+          pnpm test
+          pnpm build
+
+      - name: 执行签到
+        id: sign
+        if: steps.config.outputs.ready == 'true'
+        env:
+          TAYGEDO_ACCOUNTS: ${{ secrets.TAYGEDO_ACCOUNTS }}
+          TAYGEDO_CREDENTIAL_KEY: ${{ secrets.TAYGEDO_CREDENTIAL_KEY }}
+          TAYGEDO_PASSWORDS: ${{ secrets.TAYGEDO_PASSWORDS }}
+          TAYGEDO_NOTIFICATION_URLS: ${{ secrets.TAYGEDO_NOTIFICATION_URLS }}
+          TAYGEDO_SERVERCHAN_SENDKEY: ${{ secrets.TAYGEDO_SERVERCHAN_SENDKEY }}
+          TAYGEDO_MAX_RETRIES: ${{ vars.TAYGEDO_MAX_RETRIES }}
+          TAYGEDO_ACCOUNT_CONCURRENCY: ${{ vars.TAYGEDO_ACCOUNT_CONCURRENCY }}
+          TAYGEDO_COIN_TASKS: ${{ vars.TAYGEDO_COIN_TASKS || 'false' }}
+          TAYGEDO_CLOUD_DURATION: ${{ vars.TAYGEDO_CLOUD_DURATION || 'false' }}
+          TAYGEDO_SHARE_PLATFORM: ${{ vars.TAYGEDO_SHARE_PLATFORM }}
+        run: |
+          # 公共日志中只保留签到计数，详细输出可能包含昵称和接口响应。
+          log="$RUNNER_TEMP/taygedo-attendance.log"
+          status=0
+          pnpm action > "$log" 2>&1 || status=$?
+          grep -m 1 -Ex '总账号：[0-9]+，成功：[0-9]+，失败：[0-9]+，跳过：[0-9]+' "$log" || true
+          if (( status != 0 )); then
+            echo '::error::签到执行失败，请检查账号状态和 GitHub Secrets。'
+            exit "$status"
+          fi
+
+      - name: 更新账号 Secret
+        if: ${{ !cancelled() && (steps.sign.outcome == 'success' || steps.sign.outcome == 'failure') && hashFiles('taygedo/updated-accounts.json') != '' }}
+        env:
+          GH_TOKEN: ${{ secrets.GH_SECRET_UPDATE_TOKEN }}
+        run: gh secret set TAYGEDO_ACCOUNTS --repo "$GITHUB_REPOSITORY" < updated-accounts.json
+
+  keepalive:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      actions: write
+    steps:
+      - name: 保持定时签到启用
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow enable taygedo-attendance.yml --repo "$GITHUB_REPOSITORY"
